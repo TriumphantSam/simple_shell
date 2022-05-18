@@ -1,38 +1,55 @@
-#include "holberton.h"
+#include "shell.h"
 
 /**
- * main - entry point for application
- * @ac: argument count
- * @av: argument vector
- * Return: 0 on success
+ * main - Entry point of the shell
+ *
+ * @ac: Argument count
+ * @av: Argument vector
+ *
+ * Return: the (int)value of status.
  */
-int main(int ac, char **av)
+int main(int ac __attribute__((unused)), char **av __attribute__((unused)))
 {
-	config build;
+	char *buf, *dir;
+	struct stat st;
+	cmd_t cmd;
+	int status;
+	size_t buflen = 0;
+	pid_t id;
+	char **input;
 
-	(void)ac;
-	signal(SIGINT, sigintHandler);
-	configInit(&build);
-	build.shellName = av[0];
-	shell(&build);
-	return (0);
-}
+	/*Ensure the 3 file descriptors are open */
+	open_console();
 
-/**
- * configInit - initialize member values for config struct
- * @build: input build
- * Return: build with initialized members
- */
-config *configInit(config *build)
-{
-	build->env = generateLinkedList(environ);
-	build->envList = NULL;
-	build->args = NULL;
-	build->buffer = NULL;
-	build->path = _getenv("PATH", environ);
-	build->fullPath = NULL;
-	build->lineCounter = 0;
-	build->shellName = NULL;
-	build->errorStatus = 0;
-	return (build);
+	/*Initialize the global cmd struct variable*/
+	init_cmd(&cmd);
+
+	/*REPL Loop*/
+	while (cmd.ready)
+	{
+		status = isatty(STDIN_FILENO);
+		prompt(status);
+
+		if (_getline(&buf, &buflen, stdin) <= EOF)
+			cmd.ready = 0, exit(EXIT_SUCCESS);
+
+		setcmd(buf, &cmd);
+		input = get_toks(buf, DELIM);
+
+		if (parse_builtins(input, &cmd))
+			continue;
+
+		dir = _which(input[0]);
+
+		if (dir && _fork() == 0)
+			runcmd(dir, input, &cmd);
+		else if (!dir)
+			t_error("invalid command\n");
+		else
+			wait(NULL);
+	}
+
+	free(buf);
+	free(input);
+	return (cmd.status);
 }
